@@ -77,6 +77,34 @@ npm run format
 
 #### Back on track
 
+Now that you have a running website it's time to deploy it. Commit everything and push it to GitHub, GitLab or BitBucket. Now sign up to [Vercel](https://vercel.com/signup) by choosing your cloud Git provider.
+
+![Vercel sign up](images/03_vercel_sign_up.png)
+
+One more click to authorize Vercel on your cloud Git provider and you are ready to deploy. 
+
+Now you should be on your Vercel dashboard and should see a nice black "Import Project" button. I did not think twice and just clicked it, then I just kept on clicking until my project was deployed!
+
+![Import](images/04_import.png)
+
+![Import](images/06_import.png)
+
+![Import](images/07_import.png)
+
+![Import](images/08_import.png)
+
+![Import](images/09_import.png)
+
+![Import](images/10_import.png)
+
+![Import](images/11_production_deployment.png)
+
+Now I have a website running on https://vexnimo.now.sh/ that will update on each push to master. 
+
+Time for step 2.
+
+### Authentication using AWS Cognito
+
 ### License
 
 This repo is licensed under the [MIT License](LICENSE).
