@@ -59,7 +59,7 @@ echo "{}" >> .prettierrc
 
 I copied the Prettier intermezzo from one of my other [articles](https://levelup.gitconnected.com/agnita-authentication-for-create-react-app-using-aws-cognito-80cde1fb781b) because I really like Prettier, but I did not want to come up with all that stuff again.
 
-I do have to mention one more thing about Prettier. When you build a Next.js app, Next.js creates a `.next` folder where it puts all kinds of compiled files. There's no need to format these, you don't even need to check it in. But Prettier doesn't now this so you should tell Prettier.
+I do have to mention one more thing about Prettier. When you build a Next.js app, Next.js creates a `.next` folder where it puts all kinds of compiled files. There's no need to format these, you don't even need to check it in. But Prettier doesn't know this so you should tell Prettier.
 
 ```shell
 echo ".next" >> .prettierignore
