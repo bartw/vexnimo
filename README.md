@@ -105,6 +105,271 @@ Time for step 2.
 
 ### Authentication using AWS Cognito
 
+My previous article was about [Authentication for Create React App using AWS Cognito](https://medium.com/@bartwijnants/agnita-authentication-for-create-react-app-using-aws-cognito-80cde1fb781b), the first part of that article talks about setting up the [AWS Cognito](https://aws.amazon.com/cognito/) side of things, I set up Cognito for this project using that article and you can too.
+
+The frontend side will be different though because I'm now using Next.js instead of [CRA](https://create-react-app.dev/) and because I'm not going for a proof of concept but an actual app.
+
+Get ready for a bunch of code.
+
+I'm going to start with the configuration. I'm going to create a `.env` file in the root of my project and make sure that this file is added to `.gitignore` so we don't leak any configuration to the public.
+
+```
+REGION=us-east-1
+USER_POOL_ID=us-east-1_ddAwURgHu
+USER_POOL_WEB_CLIENT_ID=11nhk5jjpd5pfd35f24qredtyf
+IDENTITY_POOL_ID=us-east-1:0b1b9456-789w-4532-nv31-1b8230fb8d72
+```
+
+If you don't push this file to Git then there must be a way to let Vercel know that these environment variables exist. And that way is the Vercel dashboard.
+
+Browse to https://vercel.com/dashboard and click on your project.
+
+![Vercel Dashboard](images/12_vercel_dashboard.png)
+
+In the menu of project you can go to the settings page.
+
+![Settings](images/13_settings.png)
+
+And if you scroll down in the general tab of the settings you will see an Environment Variables block where you can add the same environment variables.
+
+![Environment Variables](images/14_env_vars.png)
+
+Next.js requires on extra step to expose the environment variables to your application: `next.config.js`. 
+
+```js
+module.exports = {
+  env: {
+    REGION: process.env.REGION,
+    USER_POOL_ID: process.env.USER_POOL_ID,
+    USER_POOL_WEB_CLIENT_ID: process.env.USER_POOL_WEB_CLIENT_ID,
+    IDENTITY_POOL_ID: process.env.IDENTITY_POOL_ID,
+  },
+};
+```
+
+Now let's install some dependencies. I've become a little smarter since my previous article. I found out that you can install only the dependencies of [aws-amplify](https://github.com/aws-amplify/amplify-js) that you use so you don't need to install the whole thing.
+
+```shell
+npm install --save @aws-amplify/core @aws-amplify/auth
+```
+
+```shell
+mkdir auth
+touch auth/auth.js
+touch auth/context.js
+touch auth/use-auth.js
+touch auth/use-is-authenticated.js
+touch auth/use-redirect-authenticated.js
+touch auth/use-redirect-unauthenticated.js
+touch auth/index.js
+```
+
+```js
+import Amplify, { Hub } from "@aws-amplify/core";
+import AmplifyAuth from "@aws-amplify/auth";
+
+let callbacks = [];
+let isAuthenticated = false;
+
+const uuid = () =>
+  "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    var r = (Math.random() * 16) | 0,
+      v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+
+const fireCallbacks = () =>
+  callbacks.forEach((cb) => cb.callback(isAuthenticated));
+
+class Auth {
+  constructor() {
+    Amplify.configure({
+      Auth: {
+        region: process.env.REGION,
+        userPoolId: process.env.USER_POOL_ID,
+        userPoolWebClientId: process.env.USER_POOL_WEB_CLIENT_ID,
+      },
+    });
+
+    const listener = (data) => {
+      switch (data.payload.event) {
+        case "signIn":
+          isAuthenticated = true;
+          fireCallbacks();
+          break;
+        case "signOut":
+          isAuthenticated = false;
+          fireCallbacks();
+          break;
+        case "signIn_failure":
+        case "signUp_failure":
+        case "configured":
+          break;
+        default:
+          console.log("unhandled auth event:", data.payload.event);
+      }
+    };
+
+    Hub.listen("auth", listener);
+  }
+
+  initialize() {
+    return AmplifyAuth.currentSession()
+      .then(() => {
+        isAuthenticated = true;
+        fireCallbacks();
+      })
+      .catch(() => {
+        isAuthenticated = false;
+        fireCallbacks();
+      });
+  }
+
+  isAuthenticated() {
+    return isAuthenticated;
+  }
+
+  onAuthStateChanged(callback) {
+    const id = uuid();
+    callbacks = [...callbacks, { id, callback }];
+    return () => {
+      callbacks = callbacks.filter((cb) => id !== cb.id);
+    };
+  }
+
+  token() {
+    return AmplifyAuth.currentSession()
+      .then((session) => session.getIdToken())
+      .then((accessToken) => accessToken.getJwtToken())
+      .catch(() => null);
+  }
+
+  signUp({ email, password }) {
+    return AmplifyAuth.signUp({
+      username: email,
+      password,
+      attributes: { email },
+    }).then(() => {});
+  }
+
+  confirmSignUp({ email, confirmationCode }) {
+    return AmplifyAuth.confirmSignUp(email, confirmationCode).then(() => {});
+  }
+
+  resendConfirmationCode({ email }) {
+    return AmplifyAuth.resendSignUp(email).then(() => {});
+  }
+
+  signIn({ email, password }) {
+    return AmplifyAuth.signIn(email, password).then(() => {});
+  }
+
+  signOut() {
+    AmplifyAuth.signOut();
+  }
+}
+
+export default Auth;
+```
+
+```js
+import { createContext } from "react";
+
+const AuthContext = createContext(null);
+
+export default AuthContext;
+```
+
+```js
+import { useContext } from "react";
+import AuthContext from "./context";
+
+const useAuth = () => {
+  const auth = useContext(AuthContext);
+
+  if (!auth) {
+    throw new Error("Auth is not available");
+  }
+
+  return auth;
+};
+
+export default useAuth;
+```
+
+```js
+import { useState, useEffect } from "react";
+import useAuth from "./use-auth";
+
+const useIsAuthenticated = () => {
+  const auth = useAuth();
+
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    auth.isAuthenticated()
+  );
+
+  useEffect(
+    () =>
+      auth.onAuthStateChanged((isAuthenticated) => {
+        setIsAuthenticated(isAuthenticated);
+      }),
+    [auth]
+  );
+
+  return isAuthenticated;
+};
+
+export default useIsAuthenticated;
+```
+
+```js
+import Router from "next/router";
+import useIsAuthenticated from "./use-is-authenticated";
+
+const useRedirectAuthenticated = () => {
+  const isAuthenticated = useIsAuthenticated();
+
+  if (isAuthenticated) {
+    Router.push("/dashboard");
+  }
+};
+
+export default useRedirectAuthenticated;
+```
+
+```js
+import Router from "next/router";
+import useIsAuthenticated from "./use-is-authenticated";
+
+const useRedirectUnauthenticated = () => {
+  const isAuthenticated = useIsAuthenticated();
+
+  if (!isAuthenticated) {
+    Router.push("/");
+  }
+};
+
+export default useRedirectUnauthenticated;
+```
+
+```js
+import Auth from "./auth";
+import AuthContext from "./context";
+import useAuth from "./use-auth";
+import useIsAuthenticated from "./use-is-authenticated";
+import useRedirectUnauthenticated from "./use-redirect-unauthenticated";
+import useRedirectAuthenticated from "./use-redirect-authenticated";
+
+export default Auth;
+export {
+  AuthContext,
+  useAuth,
+  useIsAuthenticated,
+  useRedirectUnauthenticated,
+  useRedirectAuthenticated,
+};
+```
+
 ### License
 
 This repo is licensed under the [MIT License](LICENSE).
